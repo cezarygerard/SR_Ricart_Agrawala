@@ -36,11 +36,19 @@ public class RAMutex implements Runnable {
 	private ServerSocket serverSocket;
 	private JSONParser parser;
 	private volatile boolean initDone;
+	private volatile int initCount;
+	private volatile boolean needsToken;
+	private volatile boolean hasToken;
+	private volatile int repliesCount;
 
 	private static final int BAD_VALUE = -1;
 
 	public RAMutex(HashMap<String, String> params) throws IOException {
 		initDone = false;
+		needsToken = false;
+		hasToken = false;
+		repliesCount = 0;
+		initCount = 0;
 		int initHostPort;
 		String initHostAddress;
 		parser = new JSONParser();
@@ -76,7 +84,8 @@ public class RAMutex implements Runnable {
 						"both port and init_host_port not specified!");
 
 			serverSocket = new ServerSocket(port);
-
+			initDone = true;
+			
 		} else {// odpytuj sponsora
 			serverSocket = new ServerSocket(0);
 			thisNode.setPort(serverSocket.getLocalPort());
@@ -85,62 +94,39 @@ public class RAMutex implements Runnable {
 
 		new Thread(this).start();
 
+		// a tu mozna przetestowac umieranie
+		// new Thread(new Runnable() {
+		// public void run() {
+		// try {
+		// Thread.sleep(1000*30);
+		// doDie();
+		// System.exit(0);
+		// } catch (InterruptedException e) {
+		// // TODO Auto-generated catch block
+		// e.printStackTrace();
+		// }
+		//
+		// }
+		// }).start();
+
 	}
 
-	private synchronized void doInit(String initHostAddress, int initHostPort) {
-		JSONObject jObject = new JSONObject();
-		JSONObject jHeader = prepareHeader();
-		JSONObject jRole = new JSONObject();
-		jRole.put("Role", "New");
+	private void dispatchInput(String inputLine) {
+		// parser
 
-		jObject.put("CONTENT", jRole);
-		jObject.put("FROM", jHeader);
-		jObject.put("TYPE", "INIT");
-		send(initHostAddress, initHostPort, jObject.toString());
-	}
-
-	@Override
-	public void run() {
-		Socket clientSocket = null;
-		while (true) {
+		JSONObject jobj;
+		int type;
+		synchronized (this) {
+			jobj = null;
 			try {
-				clientSocket = serverSocket.accept();
-
-				BufferedReader in = new BufferedReader(new InputStreamReader(
-						clientSocket.getInputStream()));
-
-				final String inputLine = in.readLine();
-
-				new Thread(new Runnable() {
-					public void run() {
-						System.out.println("received: " + inputLine);
-						handleInput(inputLine);
-					}
-				}).start();
-
-				in.close();
-				clientSocket.close();
-
-			} catch (IOException e) {
+				jobj = (JSONObject) parser.parse(inputLine);
+			} catch (ParseException e) {
 				e.printStackTrace();
 			}
-		}
-	}
-
-	private synchronized void handleInput(String inputLine) {
-		// parser
-		JSONObject jobj = null;
-		try {
-			jobj = (JSONObject) parser.parse(inputLine);
-		} catch (ParseException e) {
-			e.printStackTrace();
+			String key = jobj.get("TYPE").toString();
+			type = MsgType.handlerMap.get(key.toLowerCase());
 		}
 
-		// System.out.println(obj);
-
-		// System.out.println(obj.get("TYPE"));
-		String key = jobj.get("TYPE").toString();
-		int type = MsgType.handlerMap.get(key.toLowerCase());
 		switch (type) {
 		case 0:
 			handleInit(jobj); // ok
@@ -177,7 +163,7 @@ public class RAMutex implements Runnable {
 			break;
 
 		default:
-			System.out.println("Protocor error");
+			System.out.println("Protocor error: " + jobj);
 		}
 	}
 
@@ -185,19 +171,57 @@ public class RAMutex implements Runnable {
 		String status = (String) ((JSONObject) jobj.get("CONTENT"))
 				.get("STATUS");
 		if (status.equals("REMOVE")) {
-			nodes.remove( (String) ((JSONObject) jobj.get("FROM")).get("UniqueName"));			
-		} 
-//		else if (status.equals("GET")) {
-//
-//		} 
+			nodes.remove((String) ((JSONObject) jobj.get("FROM"))
+					.get("UniqueName"));
+		}
+		// else if (status.equals("GET")) {
+		//
+		// }
 		else
-			System.out.println("Protocor error");
+			System.out.println("Protocor error: " + jobj);
 
 	}
 
 	private synchronized void handleHighestSeqNum(JSONObject jobj) {
-		System.out.println("handleHighestSeqNum not imlemented");
+		String status = (String) ((JSONObject) jobj.get("CONTENT"))
+				.get("STATUS");
+		if (status.equals("GET")) {
+			// /czy powinienem wysylac, jak dopiero przyszedlem do sieci??
+			// if(!this.initDone)??
 
+			JSONObject jObject = new JSONObject();
+			JSONObject jHeader = prepareHeader();
+			JSONObject jContent = new JSONObject();
+			jContent.put("VALUE", this.sequenceNumber);
+			jContent.put("STATUS", "RESPONSE");
+			jObject.put("CONTENT", jContent);
+			jObject.put("FROM", jHeader);
+			jObject.put("TYPE", "HIGHEST_SEQ_NUM");
+
+		//	String key = (String) ((JSONObject) jobj.get("FROM"))
+			//		.get("UniqueName");
+			
+			Node replyTo = new Node((JSONObject) jobj.get("FROM"));
+			nodes.put(replyTo.getName(), replyTo);
+			sendStuff(jObject,replyTo);
+			//sendStuff(jObject, nodes.get(key));
+
+		} else if (status.equals("RESPONSE")) {
+			long tmp_max_num = (long) ((JSONObject) jobj.get("CONTENT"))
+					.get("VALUE");
+
+			++initCount;
+			if (tmp_max_num > this.sequenceNumber) {
+				this.sequenceNumber = (int) tmp_max_num;
+			}
+			if (this.initDone == false && initCount >= nodes.size()) {
+				this.initDone = true;
+				notify();
+				System.out.println("init done " + this.sequenceNumber);
+			}
+
+		} else
+			System.out.println("Protocor error: " + jobj);
 	}
 
 	private synchronized void handleAreYouThere(JSONObject jobj) {
@@ -209,18 +233,47 @@ public class RAMutex implements Runnable {
 		jObject.put("CONTENT", jContent);
 		jObject.put("FROM", jHeader);
 		jObject.put("TYPE", "YES_I_AM_THERE");
-		String key = (String) ((JSONObject) jobj.get("FROM")).get("UniqueName");
-		sendStuff(jObject, nodes.get(key));
+		//String key = (String) ((JSONObject) jobj.get("FROM")).get("UniqueName");
+		Node replyTo = new Node((JSONObject) jobj.get("FROM"));
+		nodes.put(replyTo.getName(), replyTo);
+		sendStuff(jObject,replyTo);
+		//sendStuff(jObject, nodes.get(key));
 	}
 
 	private synchronized void handleReply(JSONObject jobj) {
-		System.out.println("handleReply not imlemented");
-
+		++repliesCount;
+		if (repliesCount > nodes.size())
+			System.out.println("Protocor error: to many replies");
 	}
 
-	private synchronized void handleRequest(JSONObject obj) {
+	private void handleRequest(JSONObject jobj) {
+		int hisSeqNum = (int) ((long) ((JSONObject) jobj.get("CONTENT"))
+				.get("SeqNum"));
+		int mySeqNum = this.sequenceNumber;
+		boolean canReply = false;
 
-		// daj dzialac innym
+		while (canReply == false) {
+			if (hasToken == true)
+				canReply = false;
+			else if (hasToken == false && needsToken == false)
+				canReply = true;
+			else if (needsToken == true && hisSeqNum < mySeqNum)
+				canReply = true;
+			else if(this.thisNode.getName().compareTo(((String)((JSONObject) jobj.get("FROM")).get("UniqueName"))) > 0) 
+				canReply = true;
+//			else
+//				{
+//					System.out.println("Protocor error: " + jobj);
+//					canReply = true;
+//				}
+			try {
+				Thread.sleep(10);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+
 		JSONObject jObject = new JSONObject();
 		JSONObject jHeader = prepareHeader();
 		JSONObject jContent = new JSONObject();
@@ -228,9 +281,14 @@ public class RAMutex implements Runnable {
 		jObject.put("CONTENT", jContent);
 		jObject.put("FROM", jHeader);
 		jObject.put("TYPE", "REPLY");
-		String key = (String) ((JSONObject) obj.get("FROM")).get("UniqueName");
+		String key = (String) ((JSONObject) jobj.get("FROM")).get("UniqueName");
 		sendStuff(jObject, nodes.get(key));
-		// TODO logika mutex'a
+
+		// synchronized (this) {
+		if (hisSeqNum > this.sequenceNumber) {
+			this.sequenceNumber = (int) hisSeqNum;
+			// }
+		}
 
 	}
 
@@ -259,6 +317,16 @@ public class RAMutex implements Runnable {
 			jObject.put("TYPE", "INIT");
 
 			sendToAll(jObject);
+
+			JSONObject jObject2 = new JSONObject();
+			JSONObject jcontent2 = new JSONObject();
+			jcontent2.put("Role", "Node");
+			jcontent2.put("STATUS", "GET");
+			jObject2.put("CONTENT", jcontent2);
+			jObject2.put("FROM", jHeader);
+			jObject2.put("TYPE", "HIGHEST_SEQ_NUM");
+			sendToAll(jObject2);
+
 		} else if (role.equals("Node")) {
 			// ktos nowy sie pojawil
 			JSONObject jnewNode = (JSONObject) ((JSONObject) obj.get("CONTENT"))
@@ -276,22 +344,21 @@ public class RAMutex implements Runnable {
 			for (Node n : nodes.values()) {
 				jnodes.put(n.getName(), n.toJson());
 			}
-			
+
 			Node jnewNode = new Node((JSONObject) obj.get("FROM"));
 			nodes.put(jnewNode.getName(), jnewNode);
 			jcontent.put("NodesData", jnodes);
+			jcontent.put("Status", "OK");
 			jObject.put("CONTENT", jcontent);
 			jObject.put("FROM", jHeader);
 			jObject.put("TYPE", "INIT");
-			
+
 			sendStuff(jObject, jnewNode);
 
 		} else
-			System.out.println("Protocor error");
+			System.out.println("Protocor error: " + obj);
 
 	}
-
-
 
 	private synchronized JSONObject prepareHeader() {
 		JSONObject jHeaderObj = new JSONObject();
@@ -323,12 +390,83 @@ public class RAMutex implements Runnable {
 			out.close();
 			socket.close();
 
-			System.out.println("sending: " + stuff);
+			System.out.println("sending to:" +initHostAddress + ":" + port +"   stuff: "  + stuff);
 			// System.out.println("to: " + initHostAddress + "  " + port);
 
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+	}
+
+	private synchronized void doInit(String initHostAddress, int initHostPort) {
+		JSONObject jObject = new JSONObject();
+		JSONObject jHeader = prepareHeader();
+		JSONObject jRole = new JSONObject();
+		jRole.put("Role", "New");
+
+		jObject.put("CONTENT", jRole);
+		jObject.put("FROM", jHeader);
+		jObject.put("TYPE", "INIT");
+		send(initHostAddress, initHostPort, jObject.toString());
+	}
+
+	@Override
+	public void run() {
+		Socket clientSocket = null;
+		while (true) {
+			try {
+				clientSocket = serverSocket.accept();
+
+				BufferedReader in = new BufferedReader(new InputStreamReader(
+						clientSocket.getInputStream()));
+
+				final String inputLine = in.readLine();
+
+				new Thread(new Runnable() {
+					public void run() {
+						System.out.println("received: " + inputLine);
+						dispatchInput(inputLine);
+					}
+				}).start();
+
+				in.close();
+				clientSocket.close();
+
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	private void doDie() {
+		// TODO sparametryzowac sleep - nieco dluzej niz mozna uzywac tokentu
+		System.out.println("I hate this world... suiciding...");
+		initDone = false;
+		try {
+			Thread.sleep(10000);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		JSONObject jObject = new JSONObject();
+		JSONObject jHeader = prepareHeader();
+		JSONObject jcontent = new JSONObject();
+		jcontent.put("Status", "REMOVE");
+		jObject.put("CONTENT", jcontent);
+		jObject.put("FROM", jHeader);
+		jObject.put("TYPE", "DEAD");
+
+		sendToAll(jObject);
+
+		try {
+			Thread.sleep(10000);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		System.out.println("I hate my coffin...");
 	}
 
 	@Override
@@ -340,19 +478,62 @@ public class RAMutex implements Runnable {
 		}
 	}
 
-	private void doDie() {
-		System.out.println("doDie not imlemented");
-		
-	}
-	
-	public synchronized void requestToken() {
-		System.out.println("requestToken not imlemented");
+	// synchronized??
+	public void requestToken() {
+
+		while (!initDone) {
+			try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+
+		this.needsToken = true;
+		this.repliesCount = 0;
+
+		synchronized (this) {
+			++sequenceNumber;
+		}
+
+		JSONObject jObject = new JSONObject();
+		JSONObject jHeader = prepareHeader();
+		JSONObject jContent = new JSONObject();
+		jContent.put("SeqNum", this.sequenceNumber);
+		jObject.put("CONTENT", jContent);
+		jObject.put("FROM", jHeader);
+		jObject.put("TYPE", "REQUEST");
+		sendToAll(jObject);
+		boolean got = false;
+		int size;
+		synchronized (this) {
+			size = nodes.size();
+		}
+		while (!got) {
+			synchronized (this) {
+				if (size == repliesCount) {
+					got = true;
+				}
+
+				try {
+					Thread.sleep(10);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+		hasToken = true;
 	}
 
-	public synchronized void releaseToken() {
-		System.out.println("releaseToken not imlemented");
+	// synchronized??
+	public void releaseToken() {
+		// System.out.println("releaseToken not imlemented");
+		hasToken = false;
+		needsToken = false;
+		// notify();
 	}
-	
 
 	private static class MsgType {
 		public static String INIT = "INIT";

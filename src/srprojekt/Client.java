@@ -47,8 +47,11 @@ public class Client {
 			throws InterruptedException {
 		if (random)
 			time = ThreadLocalRandom.current().nextInt(time);
+		System.out.println("using token...1/4");
+		System.out.println("using token...2/4");
 		Thread.sleep(ThreadLocalRandom.current().nextInt(time));
-		// System.out.println("using...");
+		System.out.println("using token...3/4");
+		System.out.println("using token...4/4");
 	}
 
 	private static HashMap<String, String> parseInput(String[] args)
