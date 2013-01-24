@@ -35,10 +35,12 @@ public class RAMutex implements Runnable {
 	private volatile int sequenceNumber;
 	private ServerSocket serverSocket;
 	private JSONParser parser;
+	private volatile boolean initDone;
 
 	private static final int BAD_VALUE = -1;
 
-	public  RAMutex(HashMap<String, String> params) throws IOException {
+	public RAMutex(HashMap<String, String> params) throws IOException {
+		initDone = false;
 		int initHostPort;
 		String initHostAddress;
 		parser = new JSONParser();
@@ -108,17 +110,14 @@ public class RAMutex implements Runnable {
 						clientSocket.getInputStream()));
 
 				final String inputLine = in.readLine();
-				
-				
-				 new Thread(
-				            new Runnable() {
-				                public void run() {
-				                	System.out.println("received: " + inputLine);
-				    				handleInput(inputLine);
-				                }
-				            }).start();
-	
-				
+
+				new Thread(new Runnable() {
+					public void run() {
+						System.out.println("received: " + inputLine);
+						handleInput(inputLine);
+					}
+				}).start();
+
 				in.close();
 				clientSocket.close();
 
@@ -130,39 +129,39 @@ public class RAMutex implements Runnable {
 
 	private synchronized void handleInput(String inputLine) {
 		// parser
-		JSONObject obj = null;
+		JSONObject jobj = null;
 		try {
-			obj = (JSONObject) parser.parse(inputLine);
+			jobj = (JSONObject) parser.parse(inputLine);
 		} catch (ParseException e) {
 			e.printStackTrace();
 		}
 
-		//System.out.println(obj);
+		// System.out.println(obj);
 
-		//System.out.println(obj.get("TYPE"));
-		String key = obj.get("TYPE").toString();
+		// System.out.println(obj.get("TYPE"));
+		String key = jobj.get("TYPE").toString();
 		int type = MsgType.handlerMap.get(key.toLowerCase());
 		switch (type) {
 		case 0:
-			handleInit(obj);
+			handleInit(jobj); // ok
 			break;
 		case 1:
-
+			// handleRemove(obj);
 			break;
 		case 2:
-			handleRequest(obj);
+			handleRequest(jobj);
 			break;
 
 		case 3:
-
+			// handleRemove(jobj);
 			break;
 
 		case 4:
-			
+			handleReply(jobj);
 			break;
 
 		case 5:
-
+			handleAreYouThere(jobj); // ok
 			break;
 
 		case 6:
@@ -170,16 +169,53 @@ public class RAMutex implements Runnable {
 			break;
 
 		case 7:
-
+			handleHighestSeqNum(jobj);
 			break;
 
 		case 8:
-
+			handleDead(jobj);
 			break;
 
 		default:
 			System.out.println("Protocor error");
 		}
+	}
+
+	private synchronized void handleDead(JSONObject jobj) {
+		String status = (String) ((JSONObject) jobj.get("CONTENT"))
+				.get("STATUS");
+		if (status.equals("REMOVE")) {
+			nodes.remove( (String) ((JSONObject) jobj.get("FROM")).get("UniqueName"));			
+		} 
+//		else if (status.equals("GET")) {
+//
+//		} 
+		else
+			System.out.println("Protocor error");
+
+	}
+
+	private synchronized void handleHighestSeqNum(JSONObject jobj) {
+		System.out.println("handleHighestSeqNum not imlemented");
+
+	}
+
+	private synchronized void handleAreYouThere(JSONObject jobj) {
+
+		JSONObject jObject = new JSONObject();
+		JSONObject jHeader = prepareHeader();
+		JSONObject jContent = new JSONObject();
+
+		jObject.put("CONTENT", jContent);
+		jObject.put("FROM", jHeader);
+		jObject.put("TYPE", "YES_I_AM_THERE");
+		String key = (String) ((JSONObject) jobj.get("FROM")).get("UniqueName");
+		sendStuff(jObject, nodes.get(key));
+	}
+
+	private synchronized void handleReply(JSONObject jobj) {
+		System.out.println("handleReply not imlemented");
+
 	}
 
 	private synchronized void handleRequest(JSONObject obj) {
@@ -194,7 +230,7 @@ public class RAMutex implements Runnable {
 		jObject.put("TYPE", "REPLY");
 		String key = (String) ((JSONObject) obj.get("FROM")).get("UniqueName");
 		sendStuff(jObject, nodes.get(key));
-
+		// TODO logika mutex'a
 
 	}
 
@@ -224,23 +260,38 @@ public class RAMutex implements Runnable {
 
 			sendToAll(jObject);
 		} else if (role.equals("Node")) {
+			// ktos nowy sie pojawil
+			JSONObject jnewNode = (JSONObject) ((JSONObject) obj.get("CONTENT"))
+					.get("NewData");
+			Node newOne = new Node(jnewNode);
+			nodes.put(newOne.getName(), newOne);
 
-			// TODO ktos nowy sie pojawil
 		} else if (role.equals("New")) {
+			JSONObject jObject = new JSONObject();
+			JSONObject jHeader = prepareHeader();
+			JSONObject jcontent = new JSONObject();
+			jcontent.put("Role", "Sponsor");
+			JSONObject jnodes = new JSONObject();
+			// jnodes.
+			for (Node n : nodes.values()) {
+				jnodes.put(n.getName(), n.toJson());
+			}
+			
+			Node jnewNode = new Node((JSONObject) obj.get("FROM"));
+			nodes.put(jnewNode.getName(), jnewNode);
+			jcontent.put("NodesData", jnodes);
+			jObject.put("CONTENT", jcontent);
+			jObject.put("FROM", jHeader);
+			jObject.put("TYPE", "INIT");
+			
+			sendStuff(jObject, jnewNode);
 
-			// TODO LOGIKA SPONSORA - wyslanie inicjalizacji
 		} else
 			System.out.println("Protocor error");
 
 	}
 
-	public synchronized void requestToken() {
 
-	}
-
-	public synchronized void releaseToken() {
-
-	}
 
 	private synchronized JSONObject prepareHeader() {
 		JSONObject jHeaderObj = new JSONObject();
@@ -271,9 +322,9 @@ public class RAMutex implements Runnable {
 			out.println(stuff);
 			out.close();
 			socket.close();
-			
+
 			System.out.println("sending: " + stuff);
-			//System.out.println("to: " + initHostAddress + "  " + port);
+			// System.out.println("to: " + initHostAddress + "  " + port);
 
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -283,11 +334,25 @@ public class RAMutex implements Runnable {
 	@Override
 	protected void finalize() throws Throwable {
 		try {
-			// close sockets
+			doDie();
 		} finally {
 			super.finalize();
 		}
 	}
+
+	private void doDie() {
+		System.out.println("doDie not imlemented");
+		
+	}
+	
+	public synchronized void requestToken() {
+		System.out.println("requestToken not imlemented");
+	}
+
+	public synchronized void releaseToken() {
+		System.out.println("releaseToken not imlemented");
+	}
+	
 
 	private static class MsgType {
 		public static String INIT = "INIT";
@@ -303,7 +368,7 @@ public class RAMutex implements Runnable {
 		static {
 			Map<String, Integer> aMap = new HashMap<String, Integer>();
 			aMap.put(INIT.toLowerCase(), 0);
-			aMap.put(REMOVE.toLowerCase(), 1);
+			// aMap.put(REMOVE.toLowerCase(), 1);
 			aMap.put(REQUEST.toLowerCase(), 2);
 			aMap.put(REMOVE.toLowerCase(), 3);
 			aMap.put(REPLY.toLowerCase(), 4);

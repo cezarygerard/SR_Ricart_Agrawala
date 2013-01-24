@@ -56,4 +56,16 @@ public class Node {
 		this.address = object.get("Ip").toString();
 	}
 	
+	public JSONObject toJson ()
+	{
+		//JSONObject jobj = new JSONObject();
+		
+		JSONObject jinner = new JSONObject();
+		jinner.put("Ip",this.address);
+		jinner.put("Port",this.port);
+		return jinner;
+	//	jobj.put(this.name, jinner);
+	//	return jobj;
+	}
+	
 }
