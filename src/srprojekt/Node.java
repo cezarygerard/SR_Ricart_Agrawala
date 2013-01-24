@@ -68,4 +68,17 @@ public class Node {
 	//	return jobj;
 	}
 	
+	public JSONObject toJsonWithName ()
+	{
+		//JSONObject jobj = new JSONObject();
+		
+		JSONObject jinner = new JSONObject();
+		jinner.put("UniqueName",this.name);
+		jinner.put("Ip",this.address);
+		jinner.put("Port",this.port);
+		return jinner;
+	//	jobj.put(this.name, jinner);
+	//	return jobj;
+	}
+	
 }

@@ -48,7 +48,7 @@ public class RAMutex implements Runnable {
 		needsToken = false;
 		hasToken = false;
 		repliesCount = 0;
-		initCount = 0;
+		initCount = 1;
 		int initHostPort;
 		String initHostAddress;
 		parser = new JSONParser();
@@ -102,7 +102,6 @@ public class RAMutex implements Runnable {
 		// doDie();
 		// System.exit(0);
 		// } catch (InterruptedException e) {
-		// // TODO Auto-generated catch block
 		// e.printStackTrace();
 		// }
 		//
@@ -210,13 +209,13 @@ public class RAMutex implements Runnable {
 			long tmp_max_num = (long) ((JSONObject) jobj.get("CONTENT"))
 					.get("VALUE");
 
-			++initCount;
+			--initCount;
 			if (tmp_max_num > this.sequenceNumber) {
 				this.sequenceNumber = (int) tmp_max_num;
 			}
-			if (this.initDone == false && initCount >= nodes.size()) {
+			if (this.initDone == false && initCount <= 0) {
 				this.initDone = true;
-				notify();
+				//notify();
 				System.out.println("init done " + this.sequenceNumber);
 			}
 
@@ -267,9 +266,9 @@ public class RAMutex implements Runnable {
 //					canReply = true;
 //				}
 			try {
+			// TODO przerobic na semafor
 				Thread.sleep(10);
 			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
@@ -296,7 +295,6 @@ public class RAMutex implements Runnable {
 		String role = (String) ((JSONObject) obj.get("CONTENT")).get("Role");
 		if (role.equals("Sponsor")) {
 			Node sponsor = new Node((JSONObject) obj.get("FROM"));
-			nodes.put(sponsor.getName(), sponsor);
 			JSONObject jnodes = (JSONObject) ((JSONObject) obj.get("CONTENT"))
 					.get("NodesData");
 
@@ -307,20 +305,29 @@ public class RAMutex implements Runnable {
 				JSONObject jobj = (JSONObject) jnodes.get(key);
 				nodes.put(key, (new Node(jobj, key)));
 			}
-			JSONObject jObject = new JSONObject();
+			
+//			JSONObject jObject = new JSONObject();
 			JSONObject jHeader = prepareHeader();
-			JSONObject jcontent = new JSONObject();
-			jcontent.put("Role", "Node");
-			jcontent.put("NewData", jHeader);
-			jObject.put("CONTENT", jcontent);
-			jObject.put("FROM", jHeader);
-			jObject.put("TYPE", "INIT");
-
-			sendToAll(jObject);
-
+//			JSONObject jcontent = new JSONObject();
+//			jcontent.put("Role", "Node");
+//			jcontent.put("NewData", jHeader);
+//			jObject.put("CONTENT", jcontent);
+//			jObject.put("FROM", jHeader);
+//			jObject.put("TYPE", "INIT");
+//			sendToAll(jObject);
+			
+			nodes.put(sponsor.getName(), sponsor);
+			initCount = nodes.size();
+		//	try {
+			//	Thread.sleep(1000);
+			//} catch (InterruptedException e) {
+			//	
+			//	e.printStackTrace();
+			//}
+			
 			JSONObject jObject2 = new JSONObject();
 			JSONObject jcontent2 = new JSONObject();
-			jcontent2.put("Role", "Node");
+			//jcontent2.put("Role", "Node");
 			jcontent2.put("STATUS", "GET");
 			jObject2.put("CONTENT", jcontent2);
 			jObject2.put("FROM", jHeader);
@@ -335,6 +342,20 @@ public class RAMutex implements Runnable {
 			nodes.put(newOne.getName(), newOne);
 
 		} else if (role.equals("New")) {
+			
+				
+			
+			JSONObject jObject1 = new JSONObject();
+			JSONObject jHeader1 = prepareHeader();
+			JSONObject jcontent1 = new JSONObject();
+			jcontent1.put("Role", "Node");
+			jcontent1.put("NewData", (JSONObject) obj.get("FROM"));
+			jObject1.put("CONTENT", jcontent1);
+			jObject1.put("FROM", jHeader1);
+			jObject1.put("TYPE", "INIT");
+			sendToAll(jObject1);
+			
+			
 			JSONObject jObject = new JSONObject();
 			JSONObject jHeader = prepareHeader();
 			JSONObject jcontent = new JSONObject();
@@ -354,6 +375,8 @@ public class RAMutex implements Runnable {
 			jObject.put("TYPE", "INIT");
 
 			sendStuff(jObject, jnewNode);
+			
+			
 
 		} else
 			System.out.println("Protocor error: " + obj);
@@ -443,9 +466,9 @@ public class RAMutex implements Runnable {
 		System.out.println("I hate this world... suiciding...");
 		initDone = false;
 		try {
+		// TODO przerobic na semafor
 			Thread.sleep(10000);
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
@@ -460,9 +483,9 @@ public class RAMutex implements Runnable {
 		sendToAll(jObject);
 
 		try {
+		// TODO przerobic na semafor
 			Thread.sleep(10000);
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
@@ -483,9 +506,9 @@ public class RAMutex implements Runnable {
 
 		while (!initDone) {
 			try {
-				Thread.sleep(100);
+			// TODO przerobic na semafor
+				Thread.sleep(10);
 			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
@@ -517,9 +540,9 @@ public class RAMutex implements Runnable {
 				}
 
 				try {
+				// TODO przerobic na semafor
 					Thread.sleep(10);
 				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 			}
