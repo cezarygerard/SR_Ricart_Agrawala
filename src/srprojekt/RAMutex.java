@@ -20,6 +20,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
@@ -40,6 +43,9 @@ public class RAMutex implements Runnable {
 	private volatile boolean needsToken;
 	private volatile boolean hasToken;
 	private volatile int repliesCount;
+	private Map<String, LinkedList<TimerTask>> timers;
+	private Map<String, LinkedList<Runnable>> tasks;
+	private Timer timer;
 
 	private static final int BAD_VALUE = -1;
 
@@ -49,10 +55,13 @@ public class RAMutex implements Runnable {
 		hasToken = false;
 		repliesCount = 0;
 		initCount = 1;
+		timer = new Timer();
 		int initHostPort;
 		String initHostAddress;
 		parser = new JSONParser();
-
+		// ConcurrentHashMap
+		timers = new ConcurrentHashMap<String, LinkedList<TimerTask>>();
+		tasks = new ConcurrentHashMap<String, LinkedList<Runnable>>();
 		sequenceNumber = 0;
 		nodes = new HashMap<String, Node>();
 		thisNode = new Node();
@@ -85,7 +94,7 @@ public class RAMutex implements Runnable {
 
 			serverSocket = new ServerSocket(port);
 			initDone = true;
-			
+
 		} else {// odpytuj sponsora
 			serverSocket = new ServerSocket(0);
 			thisNode.setPort(serverSocket.getLocalPort());
@@ -114,7 +123,7 @@ public class RAMutex implements Runnable {
 		// parser
 
 		JSONObject jobj;
-		int type;
+		int type = BAD_VALUE;
 		synchronized (this) {
 			jobj = null;
 			try {
@@ -123,8 +132,15 @@ public class RAMutex implements Runnable {
 				e.printStackTrace();
 			}
 			String key = jobj.get("TYPE").toString();
-			type = MsgType.handlerMap.get(key.toLowerCase());
+			System.out.println("dispatcher key: " + key);
+			try {
+				type = MsgType.handlerMap.get(key.toLowerCase());
+			} catch (NullPointerException e) {
+			//	e.printStackTrace();
+			}		
 		}
+
+		cancelTimer(new Node((JSONObject) jobj.get("FROM")));
 
 		switch (type) {
 		case 0:
@@ -197,13 +213,13 @@ public class RAMutex implements Runnable {
 			jObject.put("FROM", jHeader);
 			jObject.put("TYPE", "HIGHEST_SEQ_NUM");
 
-		//	String key = (String) ((JSONObject) jobj.get("FROM"))
-			//		.get("UniqueName");
-			
+			// String key = (String) ((JSONObject) jobj.get("FROM"))
+			// .get("UniqueName");
+
 			Node replyTo = new Node((JSONObject) jobj.get("FROM"));
 			nodes.put(replyTo.getName(), replyTo);
-			sendStuff(jObject,replyTo);
-			//sendStuff(jObject, nodes.get(key));
+			sendStuff(jObject, replyTo);
+			// sendStuff(jObject, nodes.get(key));
 
 		} else if (status.equals("RESPONSE")) {
 			long tmp_max_num = (long) ((JSONObject) jobj.get("CONTENT"))
@@ -215,7 +231,7 @@ public class RAMutex implements Runnable {
 			}
 			if (this.initDone == false && initCount <= 0) {
 				this.initDone = true;
-				//notify();
+				// notify();
 				System.out.println("init done " + this.sequenceNumber);
 			}
 
@@ -231,12 +247,13 @@ public class RAMutex implements Runnable {
 
 		jObject.put("CONTENT", jContent);
 		jObject.put("FROM", jHeader);
-		jObject.put("TYPE", "YES_I_AM_THERE");
-		//String key = (String) ((JSONObject) jobj.get("FROM")).get("UniqueName");
+		jObject.put("TYPE", "YES_I_AM_HERE");
+		// String key = (String) ((JSONObject)
+		// jobj.get("FROM")).get("UniqueName");
 		Node replyTo = new Node((JSONObject) jobj.get("FROM"));
 		nodes.put(replyTo.getName(), replyTo);
-		sendStuff(jObject,replyTo);
-		//sendStuff(jObject, nodes.get(key));
+		sendStuff(jObject, replyTo);
+		// sendStuff(jObject, nodes.get(key));
 	}
 
 	private synchronized void handleReply(JSONObject jobj) {
@@ -258,15 +275,18 @@ public class RAMutex implements Runnable {
 				canReply = true;
 			else if (needsToken == true && hisSeqNum < mySeqNum)
 				canReply = true;
-			else if(this.thisNode.getName().compareTo(((String)((JSONObject) jobj.get("FROM")).get("UniqueName"))) > 0) 
+			else if (this.thisNode.getName()
+					.compareTo(
+							((String) ((JSONObject) jobj.get("FROM"))
+									.get("UniqueName"))) > 0)
 				canReply = true;
-//			else
-//				{
-//					System.out.println("Protocor error: " + jobj);
-//					canReply = true;
-//				}
+			// else
+			// {
+			// System.out.println("Protocor error: " + jobj);
+			// canReply = true;
+			// }
 			try {
-			// TODO przerobic na semafor
+				// TODO przerobic na semafor
 				Thread.sleep(10);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
@@ -305,34 +325,39 @@ public class RAMutex implements Runnable {
 				JSONObject jobj = (JSONObject) jnodes.get(key);
 				nodes.put(key, (new Node(jobj, key)));
 			}
-			
-//			JSONObject jObject = new JSONObject();
+
+			// JSONObject jObject = new JSONObject();
 			JSONObject jHeader = prepareHeader();
-//			JSONObject jcontent = new JSONObject();
-//			jcontent.put("Role", "Node");
-//			jcontent.put("NewData", jHeader);
-//			jObject.put("CONTENT", jcontent);
-//			jObject.put("FROM", jHeader);
-//			jObject.put("TYPE", "INIT");
-//			sendToAll(jObject);
-			
+			// JSONObject jcontent = new JSONObject();
+			// jcontent.put("Role", "Node");
+			// jcontent.put("NewData", jHeader);
+			// jObject.put("CONTENT", jcontent);
+			// jObject.put("FROM", jHeader);
+			// jObject.put("TYPE", "INIT");
+			// sendToAll(jObject);
+
 			nodes.put(sponsor.getName(), sponsor);
 			initCount = nodes.size();
-		//	try {
-			//	Thread.sleep(1000);
-			//} catch (InterruptedException e) {
-			//	
-			//	e.printStackTrace();
-			//}
-			
+			// try {
+			// Thread.sleep(1000);
+			// } catch (InterruptedException e) {
+			//
+			// e.printStackTrace();
+			// }
+
 			JSONObject jObject2 = new JSONObject();
 			JSONObject jcontent2 = new JSONObject();
-			//jcontent2.put("Role", "Node");
+			// jcontent2.put("Role", "Node");
 			jcontent2.put("STATUS", "GET");
 			jObject2.put("CONTENT", jcontent2);
 			jObject2.put("FROM", jHeader);
 			jObject2.put("TYPE", "HIGHEST_SEQ_NUM");
-			sendToAll(jObject2);
+			sendToAll(jObject2, new Runnable() {
+				@Override
+				public void run() {
+					doAfterGetMaxTimeOut();
+				}
+			},  10*1000);
 
 		} else if (role.equals("Node")) {
 			// ktos nowy sie pojawil
@@ -342,9 +367,7 @@ public class RAMutex implements Runnable {
 			nodes.put(newOne.getName(), newOne);
 
 		} else if (role.equals("New")) {
-			
-				
-			
+
 			JSONObject jObject1 = new JSONObject();
 			JSONObject jHeader1 = prepareHeader();
 			JSONObject jcontent1 = new JSONObject();
@@ -353,9 +376,8 @@ public class RAMutex implements Runnable {
 			jObject1.put("CONTENT", jcontent1);
 			jObject1.put("FROM", jHeader1);
 			jObject1.put("TYPE", "INIT");
-			sendToAll(jObject1);
-			
-			
+			sendToAll(jObject1, null, 0);
+
 			JSONObject jObject = new JSONObject();
 			JSONObject jHeader = prepareHeader();
 			JSONObject jcontent = new JSONObject();
@@ -375,8 +397,6 @@ public class RAMutex implements Runnable {
 			jObject.put("TYPE", "INIT");
 
 			sendStuff(jObject, jnewNode);
-			
-			
 
 		} else
 			System.out.println("Protocor error: " + obj);
@@ -391,12 +411,20 @@ public class RAMutex implements Runnable {
 		return jHeaderObj;
 	}
 
-	private synchronized void sendToAll(JSONObject stuff) {
+	private synchronized void sendToAll(JSONObject stuff, Runnable taskAterTimeout, int timeOut) {
 		Collection<Node> c = nodes.values();
 		for (Node node : c) {
 			send(node.getAddress(), node.getPort(), stuff.toString());
+			if(taskAterTimeout != null)
+			{
+				setUpTimer(node, timeOut, taskAterTimeout);
+			}
 		}
 	}
+	
+//	private synchronized void sendToAllWithTimer(JSONObject stuff) {
+//		
+//	}
 
 	private synchronized void sendStuff(JSONObject stuff, Node node) {
 		send(node.getAddress(), node.getPort(), stuff.toString());
@@ -413,7 +441,8 @@ public class RAMutex implements Runnable {
 			out.close();
 			socket.close();
 
-			System.out.println("sending to:" +initHostAddress + ":" + port +"   stuff: "  + stuff);
+			//System.out.println("sending to:" + initHostAddress + ":" + port
+			//		+ "   stuff: " + stuff);
 			// System.out.println("to: " + initHostAddress + "  " + port);
 
 		} catch (IOException e) {
@@ -447,7 +476,7 @@ public class RAMutex implements Runnable {
 
 				new Thread(new Runnable() {
 					public void run() {
-						System.out.println("received: " + inputLine);
+					//	System.out.println("received: " + inputLine);
 						dispatchInput(inputLine);
 					}
 				}).start();
@@ -466,7 +495,7 @@ public class RAMutex implements Runnable {
 		System.out.println("I hate this world... suiciding...");
 		initDone = false;
 		try {
-		// TODO przerobic na semafor
+			// TODO przerobic na semafor
 			Thread.sleep(10000);
 		} catch (InterruptedException e) {
 			e.printStackTrace();
@@ -480,10 +509,10 @@ public class RAMutex implements Runnable {
 		jObject.put("FROM", jHeader);
 		jObject.put("TYPE", "DEAD");
 
-		sendToAll(jObject);
+		sendToAll(jObject, null,0);
 
 		try {
-		// TODO przerobic na semafor
+			// TODO przerobic na semafor
 			Thread.sleep(10000);
 		} catch (InterruptedException e) {
 			e.printStackTrace();
@@ -502,11 +531,11 @@ public class RAMutex implements Runnable {
 	}
 
 	// synchronized??
-	public void requestToken() {
+	public void requestToken() throws Exception {
 
 		while (!initDone) {
 			try {
-			// TODO przerobic na semafor
+				// TODO przerobic na semafor
 				Thread.sleep(10);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
@@ -527,7 +556,17 @@ public class RAMutex implements Runnable {
 		jObject.put("CONTENT", jContent);
 		jObject.put("FROM", jHeader);
 		jObject.put("TYPE", "REQUEST");
-		sendToAll(jObject);
+		synchronized (this) {
+			sendToAll(jObject, new Runnable() {
+				@Override
+				public void run() {
+					doAfterRequestTimeOut();
+				}
+			}, 10*(nodes.size() +2)*1000);
+			
+		}
+
+		
 		boolean got = false;
 		int size;
 		synchronized (this) {
@@ -538,9 +577,11 @@ public class RAMutex implements Runnable {
 				if (size == repliesCount) {
 					got = true;
 				}
-
+				
+				if(repliesCount == BAD_VALUE)
+					throw new Exception("node died, God knows what happened");
 				try {
-				// TODO przerobic na semafor
+					// TODO przerobic na semafor
 					Thread.sleep(10);
 				} catch (InterruptedException e) {
 					e.printStackTrace();
@@ -558,7 +599,96 @@ public class RAMutex implements Runnable {
 		// notify();
 	}
 
+	private void setUpTimer(final Node node, int timeInMilis,
+			final Runnable taskAfterTimeout) {
+		// timers = new ConcurrentHashMap<String, LinkedList<TimerTask>>();
+		// tasks = new ConcurrentHashMap<String, LinkedList<Runnable>>();
+		final String nodeName = node.getName();
+		synchronized (timer) {
+			LinkedList<TimerTask> timerList = timers.get(nodeName);
+			if (timerList == null) {
+				timerList = new LinkedList<TimerTask>();
+				timers.put(node.getName(), timerList);
+
+			}
+
+			final LinkedList<TimerTask> timerListFin = timerList;
+
+			TimerTask task = new TimerTask() {
+				public void run() {
+					doAreYouThere(nodeName);
+
+					TimerTask taskAfter = new TimerTask() {
+						public void run() {
+							taskAfterTimeout.run();
+							doNodeDied(node.getName());
+						}
+					};
+					synchronized (timer) {
+						timerListFin.add(taskAfter);
+					}
+					timer.schedule(taskAfter, 10 * 1000);
+				}
+			};
+			timerListFin.add(task);
+			timer.schedule(task, timeInMilis);
+			
+			System.out.println("new Timer: " + node.getName() + " time: " + timeInMilis/1000);
+		}
+	}
+
+	private void cancelTimer(Node node) {
+
+		final String nodeName = node.getName();
+		synchronized (timer) {
+			LinkedList<TimerTask> timerList = timers.get(nodeName);
+			if (timerList != null) {
+				for (TimerTask timerTask : timerList) {
+					timerTask.cancel();
+					System.out.println("Canceled timer: " + node.getName());
+				}
+				timerList.clear();
+			}
+		}
+	}
+	
+	private void doNodeDied(String name) {
+		System.out.println("doNodeDied: " + name);
+		nodes.remove(name);
+		
+	}
+
+	private void doAreYouThere(String key) {
+		int i=0;
+		i++;				
+		System.out.println("doAreYouThere: " + key);
+		
+		JSONObject jObject = new JSONObject();
+		JSONObject jHeader = prepareHeader();
+		JSONObject jContent = new JSONObject();
+		jObject.put("CONTENT", jContent);
+		jObject.put("FROM", jHeader);
+		jObject.put("TYPE", "ARE_YOU_THERE");
+		sendStuff(jObject, nodes.get(key));
+		
+	}
+
+	private void doAfterRequestTimeOut() {
+		synchronized (this) {
+			repliesCount = BAD_VALUE;
+			System.out.println("doAfterRequestTimeOut");
+		}
+	}
+
+	private void doAfterGetMaxTimeOut() {		
+		synchronized (this) {
+			--initCount;
+			System.out.println("doAfterGetMaxTimeOut");
+		}
+	}
+
 	private static class MsgType {
+		// TODO pozamieniac gdzie sie da wartosci "STRING" na te sta³e st¹d:
 		public static String INIT = "INIT";
 		public static String REMOVE = "REMOVE";
 		public static String REQUEST = "REQUEST";

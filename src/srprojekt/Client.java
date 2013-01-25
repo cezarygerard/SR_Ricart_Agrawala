@@ -37,21 +37,26 @@ public class Client {
 
 		while (true) {
 			Thread.sleep(ThreadLocalRandom.current().nextInt(waitTime));
-			raMutex.requestToken();
-			doStuff(useTime, doRandomTimes);
+			try {
+				raMutex.requestToken();
+				doStuff(useTime, doRandomTimes);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}			
 			raMutex.releaseToken();
 		}
 	}
 
 	private static void doStuff(int time, boolean random)
 			throws InterruptedException {
-		if (random)
-			time = ThreadLocalRandom.current().nextInt(time);
-		System.out.println("using token...1/4");
+		//if (random)
+			//time = ThreadLocalRandom.current().nextInt(time);
+		System.out.println("using token...1/4 " + System.currentTimeMillis()/1000);
 		System.out.println("using token...2/4");
 		Thread.sleep(ThreadLocalRandom.current().nextInt(time));
 		System.out.println("using token...3/4");
-		System.out.println("using token...4/4");
+		System.out.println("using token...4/4" +  System.currentTimeMillis()/1000);
 	}
 
 	private static HashMap<String, String> parseInput(String[] args)
