@@ -465,8 +465,8 @@ public class RAMutex implements Runnable {
 			out.close();
 			socket.close();
 
-			// System.out.println("sending to:" + initHostAddress + ":" + port
-			// + "   stuff: " + stuff);
+			 System.out.println("sending to:" + initHostAddress + ":" + port
+			 + "   stuff: " + stuff);
 			// System.out.println("to: " + initHostAddress + "  " + port);
 
 		} catch (IOException e) {
@@ -500,7 +500,7 @@ public class RAMutex implements Runnable {
 
 				new Thread(new Runnable() {
 					public void run() {
-						// System.out.println("received: " + inputLine);
+						System.out.println("received: " + inputLine);
 						dispatchInput(inputLine);
 					}
 				}).start();
