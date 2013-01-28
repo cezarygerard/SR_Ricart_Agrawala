@@ -129,7 +129,7 @@ public class RAMutex implements Runnable {
 			try {
 				jobj = (JSONObject) parser.parse(inputLine);
 			} catch (ParseException e) {
-				e.printStackTrace();
+			//	e.printStackTrace();
 			}
 		}
 		String key = jobj.get("TYPE").toString();
@@ -470,7 +470,7 @@ public class RAMutex implements Runnable {
 			// System.out.println("to: " + initHostAddress + "  " + port);
 
 		} catch (IOException e) {
-			e.printStackTrace();
+		//	e.printStackTrace();
 		}
 	}
 
@@ -509,7 +509,7 @@ public class RAMutex implements Runnable {
 				clientSocket.close();
 
 			} catch (IOException e) {
-				e.printStackTrace();
+			//	e.printStackTrace();
 			}
 		}
 	}
@@ -524,7 +524,7 @@ public class RAMutex implements Runnable {
 			// TODO przerobic na semafor
 			Thread.sleep(10000);
 		} catch (InterruptedException e) {
-			e.printStackTrace();
+		//	e.printStackTrace();
 		}
 
 		JSONObject jObject = new JSONObject();
@@ -541,7 +541,7 @@ public class RAMutex implements Runnable {
 			// TODO przerobic na semafor
 			Thread.sleep(10000);
 		} catch (InterruptedException e) {
-			e.printStackTrace();
+		//	e.printStackTrace();
 		}
 
 		System.out.println("I hate my coffin...");
@@ -565,7 +565,7 @@ public class RAMutex implements Runnable {
 					// TODO przerobic na semafor
 					wait();
 				} catch (InterruptedException e) {
-					e.printStackTrace();
+				//	e.printStackTrace();
 				}
 			}
 		}
