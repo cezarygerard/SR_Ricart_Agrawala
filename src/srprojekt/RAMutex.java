@@ -128,7 +128,7 @@ public class RAMutex implements Runnable {
 
 	private void dispatchInput(String inputLine) {
 		// parser
-
+		inputLine = inputLine.toUpperCase();
 		JSONObject jobj;
 		int type = BAD_VALUE;
 		synchronized (this) {
@@ -143,7 +143,7 @@ public class RAMutex implements Runnable {
 		if (verbose)
 			System.out.println("dispatcher key: " + key);
 		try {
-			type = MsgType.handlerMap.get(key.toLowerCase());
+			type = MsgType.handlerMap.get(key.toUpperCase());
 		} catch (NullPointerException e) {
 			// e.printStackTrace();
 		}
@@ -195,7 +195,7 @@ public class RAMutex implements Runnable {
 				.get("STATUS");
 		if (status.equals("REMOVE")) {
 			nodes.remove((String) ((JSONObject) jobj.get("FROM"))
-					.get("UniqueName"));
+					.get("UNIQUENAME"));
 		}
 		// else if (status.equals("GET")) {
 		//
@@ -222,7 +222,7 @@ public class RAMutex implements Runnable {
 			jObject.put("TYPE", "HIGHEST_SEQ_NUM");
 
 			// String key = (String) ((JSONObject) jobj.get("FROM"))
-			// .get("UniqueName");
+			// .get("UNIQUENAME");
 			Node replyTo = new Node((JSONObject) jobj.get("FROM"));
 			synchronized (this) {
 
@@ -259,7 +259,7 @@ public class RAMutex implements Runnable {
 		jObject.put("FROM", jHeader);
 		jObject.put("TYPE", "YES_I_AM_HERE");
 		// String key = (String) ((JSONObject)
-		// jobj.get("FROM")).get("UniqueName");
+		// jobj.get("FROM")).get("UNIQUENAME");
 		Node replyTo = new Node((JSONObject) jobj.get("FROM"));
 		// nodes.put(replyTo.getName(), replyTo);
 		sendStuff(jObject, replyTo);
@@ -283,7 +283,7 @@ public class RAMutex implements Runnable {
 
 	private void handleRequest(JSONObject jobj) {
 		int hisSeqNum = (int) ((long) ((JSONObject) jobj.get("CONTENT"))
-				.get("SeqNum"));
+				.get("SEQNUM"));
 		int mySeqNum = this.sequenceNumber;
 		boolean canReply = false;
 
@@ -298,7 +298,7 @@ public class RAMutex implements Runnable {
 					canReply = true;
 				else if (this.thisNode.getName().compareTo(
 						((String) ((JSONObject) jobj.get("FROM"))
-								.get("UniqueName"))) > 0)
+								.get("UNIQUENAME"))) > 0)
 					canReply = true;
 				else {
 					try {
@@ -323,7 +323,7 @@ public class RAMutex implements Runnable {
 		jObject.put("CONTENT", jContent);
 		jObject.put("FROM", jHeader);
 		jObject.put("TYPE", "REPLY");
-		String key = (String) ((JSONObject) jobj.get("FROM")).get("UniqueName");
+		String key = (String) ((JSONObject) jobj.get("FROM")).get("UNIQUENAME");
 		synchronized (this) {
 			sendStuff(jObject, nodes.get(key));
 		}
@@ -337,11 +337,11 @@ public class RAMutex implements Runnable {
 	}
 
 	private synchronized void handleInit(JSONObject obj) {
-		String role = (String) ((JSONObject) obj.get("CONTENT")).get("Role");
-		if (role.equals("Sponsor")) {
+		String role = (String) ((JSONObject) obj.get("CONTENT")).get("ROLE");
+		if (role.equals("SPONSOR")) {
 			Node sponsor = new Node((JSONObject) obj.get("FROM"));
 			JSONObject jnodes = (JSONObject) ((JSONObject) obj.get("CONTENT"))
-					.get("NodesData");
+					.get("NODESDATA");
 
 			Set keys = jnodes.keySet();
 			Iterator iterator = keys.iterator();
@@ -385,20 +385,20 @@ public class RAMutex implements Runnable {
 				}
 			}, 10 * 1000);
 
-		} else if (role.equals("Node")) {
+		} else if (role.equals("NODE")) {
 			// ktos nowy sie pojawil
 			JSONObject jnewNode = (JSONObject) ((JSONObject) obj.get("CONTENT"))
-					.get("NewData");
+					.get("NEWDATA");
 			Node newOne = new Node(jnewNode);
 			nodes.put(newOne.getName(), newOne);
 
-		} else if (role.equals("New")) {
+		} else if (role.equals("NEW")) {
 
 			JSONObject jObject1 = new JSONObject();
 			JSONObject jHeader1 = prepareHeader();
 			JSONObject jcontent1 = new JSONObject();
-			jcontent1.put("Role", "Node");
-			jcontent1.put("NewData", (JSONObject) obj.get("FROM"));
+			jcontent1.put("ROLE", "NODE");
+			jcontent1.put("NEWDATA", (JSONObject) obj.get("FROM"));
 			jObject1.put("CONTENT", jcontent1);
 			jObject1.put("FROM", jHeader1);
 			jObject1.put("TYPE", "INIT");
@@ -407,7 +407,7 @@ public class RAMutex implements Runnable {
 			JSONObject jObject = new JSONObject();
 			JSONObject jHeader = prepareHeader();
 			JSONObject jcontent = new JSONObject();
-			jcontent.put("Role", "Sponsor");
+			jcontent.put("ROLE", "SPONSOR");
 			JSONObject jnodes = new JSONObject();
 			// jnodes.
 			for (Node n : nodes.values()) {
@@ -416,8 +416,8 @@ public class RAMutex implements Runnable {
 
 			Node jnewNode = new Node((JSONObject) obj.get("FROM"));
 			nodes.put(jnewNode.getName(), jnewNode);
-			jcontent.put("NodesData", jnodes);
-			jcontent.put("Status", "OK");
+			jcontent.put("NODESDATA", jnodes);
+			jcontent.put("STATUS", "OK");
 			jObject.put("CONTENT", jcontent);
 			jObject.put("FROM", jHeader);
 			jObject.put("TYPE", "INIT");
@@ -466,6 +466,7 @@ public class RAMutex implements Runnable {
 
 	private synchronized void send(String initHostAddress, int port,
 			String stuff) {
+		stuff = stuff.toUpperCase();
 		try {
 			Socket socket = new Socket(InetAddress.getByName(initHostAddress),
 					port);
@@ -766,15 +767,15 @@ public class RAMutex implements Runnable {
 
 		static {
 			Map<String, Integer> aMap = new HashMap<String, Integer>();
-			aMap.put(INIT.toLowerCase(), 0);
-			// aMap.put(REMOVE.toLowerCase(), 1);
-			aMap.put(REQUEST.toLowerCase(), 2);
-			aMap.put(REMOVE.toLowerCase(), 3);
-			aMap.put(REPLY.toLowerCase(), 4);
-			aMap.put(ARE_YOU_THERE.toLowerCase(), 5);
-			aMap.put(YES_I_AM_HERE.toLowerCase(), 6);
-			aMap.put(HIGHEST_SEQ_NUM.toLowerCase(), 7);
-			aMap.put(DEAD.toLowerCase(), 8);
+			aMap.put(INIT.toUpperCase(), 0);
+			// aMap.put(REMOVE.toUpperCase(), 1);
+			aMap.put(REQUEST.toUpperCase(), 2);
+			aMap.put(REMOVE.toUpperCase(), 3);
+			aMap.put(REPLY.toUpperCase(), 4);
+			aMap.put(ARE_YOU_THERE.toUpperCase(), 5);
+			aMap.put(YES_I_AM_HERE.toUpperCase(), 6);
+			aMap.put(HIGHEST_SEQ_NUM.toUpperCase(), 7);
+			aMap.put(DEAD.toUpperCase(), 8);
 			handlerMap = Collections.unmodifiableMap(aMap);
 		}
 	}

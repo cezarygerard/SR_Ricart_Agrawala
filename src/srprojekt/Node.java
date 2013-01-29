@@ -37,7 +37,7 @@ public class Node {
 
 	}
 	public Node(JSONObject object) {
-		String uName = object.get("UniqueName").toString();
+		String uName = object.get("UNIQUENAME").toString();
 		if(uName != null)
 		{
 			this.name = uName;
@@ -46,14 +46,14 @@ public class Node {
 		{
 			
 		}
-		this.port = Integer.parseInt(object.get("Port").toString() );
-		this.address = object.get("Ip").toString();
+		this.port = Integer.parseInt(object.get("PORT").toString() );
+		this.address = object.get("IP").toString();
 	}
 	
 	public Node(JSONObject object, String name) {
 		this.name = name;
-		this.port = Integer.parseInt(object.get("Port").toString() );
-		this.address = object.get("Ip").toString();
+		this.port = Integer.parseInt(object.get("PORT").toString() );
+		this.address = object.get("IP").toString();
 	}
 	
 	public JSONObject toJson ()
@@ -61,8 +61,8 @@ public class Node {
 		//JSONObject jobj = new JSONObject();
 		
 		JSONObject jinner = new JSONObject();
-		jinner.put("Ip",this.address);
-		jinner.put("Port",this.port);
+		jinner.put("IP",this.address);
+		jinner.put("PORT",this.port);
 		return jinner;
 	//	jobj.put(this.name, jinner);
 	//	return jobj;
@@ -70,12 +70,11 @@ public class Node {
 	
 	public JSONObject toJsonWithName ()
 	{
-		//JSONObject jobj = new JSONObject();
-		
+		//JSONObject jobj = new JSONObject();		
 		JSONObject jinner = new JSONObject();
-		jinner.put("UniqueName",this.name);
-		jinner.put("Ip",this.address);
-		jinner.put("Port",this.port);
+		jinner.put("UNIQUENAME",this.name);
+		jinner.put("IP",this.address);
+		jinner.put("PORT",this.port);
 		return jinner;
 	//	jobj.put(this.name, jinner);
 	//	return jobj;
