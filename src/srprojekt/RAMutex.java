@@ -4,29 +4,22 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.security.InvalidParameterException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
-import org.json.simple.parser.ContainerFactory;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
@@ -43,12 +36,14 @@ public class RAMutex implements Runnable {
 	private volatile boolean needsToken;
 	private volatile boolean hasToken;
 	private volatile int repliesCount;
-	private Map<String, LinkedList<TimerTask>> timers;
+	private Map<String, LinkedList<TimerTask>> timerLists;
+	
 	private Map<String, LinkedList<Runnable>> tasks;
 	private Timer timer;
 	private static final int BAD_VALUE = -1;
 	private JSONObject jHeaderObj;
 	private boolean verbose;
+	private Object timerLockObj;
 
 	public RAMutex(HashMap<String, String> params) throws IOException {
 		initDone = false;
@@ -57,11 +52,13 @@ public class RAMutex implements Runnable {
 		repliesCount = 0;
 		initCount = 1;
 		timer = new Timer();
+		timerLockObj = new Object();
+	//	timer = new Tim
 		int initHostPort;
 		String initHostAddress;
 		parser = new JSONParser();
 		// ConcurrentHashMap
-		timers = new ConcurrentHashMap<String, LinkedList<TimerTask>>();
+		timerLists = new ConcurrentHashMap<String, LinkedList<TimerTask>>();
 		tasks = new ConcurrentHashMap<String, LinkedList<Runnable>>();
 		sequenceNumber = 0;
 		nodes = new HashMap<String, Node>();
@@ -658,11 +655,11 @@ public class RAMutex implements Runnable {
 			// timers = new ConcurrentHashMap<String, LinkedList<TimerTask>>();
 			// tasks = new ConcurrentHashMap<String, LinkedList<Runnable>>();
 			final String nodeName = node.getName();
-			synchronized (timer) {
-				LinkedList<TimerTask> timerList = timers.get(nodeName);
+			synchronized (timerLockObj) {
+				LinkedList<TimerTask> timerList = timerLists.get(nodeName);
 				if (timerList == null) {
 					timerList = new LinkedList<TimerTask>();
-					timers.put(node.getName(), timerList);
+					timerLists.put(node.getName(), timerList);
 
 				}
 
@@ -678,7 +675,7 @@ public class RAMutex implements Runnable {
 								doNodeDied(node.getName());
 							}
 						};
-						synchronized (timer) {
+						synchronized (timerLockObj) {
 							timerListFin.add(taskAfter);
 						}
 						timer.schedule(taskAfter, 10 * 1000);
@@ -688,7 +685,7 @@ public class RAMutex implements Runnable {
 				timerListFin.add(task);
 
 				timer.schedule(task, timeInMilis);
-
+				
 				System.out.println("new Timer: " + node.getName() + " time: "
 						+ timeInMilis / 1000);
 			}
@@ -701,8 +698,8 @@ public class RAMutex implements Runnable {
 	private void cancelTimer(Node node) {
 
 		final String nodeName = node.getName();
-		synchronized (timer) {
-			LinkedList<TimerTask> timerList = timers.get(nodeName);
+		synchronized (timerLockObj) {
+			LinkedList<TimerTask> timerList = timerLists.get(nodeName);
 			if (timerList != null) {
 				for (TimerTask timerTask : timerList) {
 					timerTask.cancel();
