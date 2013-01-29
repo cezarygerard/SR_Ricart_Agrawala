@@ -48,6 +48,7 @@ public class RAMutex implements Runnable {
 	private Timer timer;
 	private static final int BAD_VALUE = -1;
 	private JSONObject jHeaderObj;
+	private boolean verbose;
 
 	public RAMutex(HashMap<String, String> params) throws IOException {
 		initDone = false;
@@ -66,6 +67,11 @@ public class RAMutex implements Runnable {
 		nodes = new HashMap<String, Node>();
 		thisNode = new Node();
 		thisNode.setName(params.get("name"));
+
+		String verboseStr = params.get("verbose");
+		if (verboseStr != null) {
+			verbose = Boolean.parseBoolean(verboseStr);
+		}
 
 		thisNode.setAddress(params.get("address"));
 		if (thisNode.getAddress() == null)
@@ -93,10 +99,14 @@ public class RAMutex implements Runnable {
 						"both port and init_host_port not specified!");
 
 			serverSocket = new ServerSocket(port);
+			String a = serverSocket.getLocalSocketAddress().toString();
+			String b = serverSocket.getLocalSocketAddress().toString();
 			initDone = true;
 
 		} else {// odpytuj sponsora
 			serverSocket = new ServerSocket(0);
+			String a = serverSocket.getLocalSocketAddress().toString();
+			String b = serverSocket.getLocalSocketAddress().toString();
 			thisNode.setPort(serverSocket.getLocalPort());
 			doInit(initHostAddress, initHostPort);
 		}
@@ -129,11 +139,12 @@ public class RAMutex implements Runnable {
 			try {
 				jobj = (JSONObject) parser.parse(inputLine);
 			} catch (ParseException e) {
-			//	e.printStackTrace();
+				// e.printStackTrace();
 			}
 		}
 		String key = jobj.get("TYPE").toString();
-		System.out.println("dispatcher key: " + key);
+		if (verbose)
+			System.out.println("dispatcher key: " + key);
 		try {
 			type = MsgType.handlerMap.get(key.toLowerCase());
 		} catch (NullPointerException e) {
@@ -451,6 +462,7 @@ public class RAMutex implements Runnable {
 	// }
 
 	private synchronized void sendStuff(JSONObject stuff, Node node) {
+
 		send(node.getAddress(), node.getPort(), stuff.toString());
 
 	}
@@ -464,13 +476,14 @@ public class RAMutex implements Runnable {
 			out.println(stuff);
 			out.close();
 			socket.close();
-
-			 System.out.println("sending to:" + initHostAddress + ":" + port
-			 + "   stuff: " + stuff);
+			if (verbose)
+				System.out.println("sending to:" + initHostAddress + ":" + port
+						+ "   stuff: " + stuff);
 			// System.out.println("to: " + initHostAddress + "  " + port);
 
 		} catch (IOException e) {
-		//	e.printStackTrace();
+			if (verbose)
+				e.printStackTrace();
 		}
 	}
 
@@ -488,10 +501,10 @@ public class RAMutex implements Runnable {
 
 	@Override
 	public void run() {
-		Socket clientSocket = null;
+		// final Socket clientSocket;// = null;
 		while (true) {
 			try {
-				clientSocket = serverSocket.accept();
+				final Socket clientSocket = serverSocket.accept();
 
 				BufferedReader in = new BufferedReader(new InputStreamReader(
 						clientSocket.getInputStream()));
@@ -500,7 +513,10 @@ public class RAMutex implements Runnable {
 
 				new Thread(new Runnable() {
 					public void run() {
-						System.out.println("received: " + inputLine);
+						System.out.println("received: client addr: "
+								+ clientSocket.getRemoteSocketAddress()
+								+ "  port: " + clientSocket.getPort()
+								+ inputLine);
 						dispatchInput(inputLine);
 					}
 				}).start();
@@ -509,7 +525,8 @@ public class RAMutex implements Runnable {
 				clientSocket.close();
 
 			} catch (IOException e) {
-			//	e.printStackTrace();
+				if (verbose)
+					e.printStackTrace();
 			}
 		}
 	}
@@ -524,7 +541,8 @@ public class RAMutex implements Runnable {
 			// TODO przerobic na semafor
 			Thread.sleep(10000);
 		} catch (InterruptedException e) {
-		//	e.printStackTrace();
+			if (verbose)
+				e.printStackTrace();
 		}
 
 		JSONObject jObject = new JSONObject();
@@ -541,7 +559,8 @@ public class RAMutex implements Runnable {
 			// TODO przerobic na semafor
 			Thread.sleep(10000);
 		} catch (InterruptedException e) {
-		//	e.printStackTrace();
+			if (verbose)
+				e.printStackTrace();
 		}
 
 		System.out.println("I hate my coffin...");
@@ -565,7 +584,7 @@ public class RAMutex implements Runnable {
 					// TODO przerobic na semafor
 					wait();
 				} catch (InterruptedException e) {
-				//	e.printStackTrace();
+					// e.printStackTrace();
 				}
 			}
 		}
@@ -610,8 +629,7 @@ public class RAMutex implements Runnable {
 					}
 				}
 
-				if (repliesCount == BAD_VALUE)
-				{
+				if (repliesCount == BAD_VALUE) {
 					releaseToken();
 					throw new Exception("node died, God knows what happened");
 				}
@@ -628,50 +646,55 @@ public class RAMutex implements Runnable {
 
 	// synchronized??
 	public synchronized void releaseToken() {
-		// System.out.println("releaseToken not imlemented");		
-			hasToken = false;
-			needsToken = false;
-			notifyAll();
+		// System.out.println("releaseToken not imlemented");
+		hasToken = false;
+		needsToken = false;
+		notifyAll();
 	}
 
 	private void setUpTimer(final Node node, int timeInMilis,
 			final Runnable taskAfterTimeout) {
-		// timers = new ConcurrentHashMap<String, LinkedList<TimerTask>>();
-		// tasks = new ConcurrentHashMap<String, LinkedList<Runnable>>();
-		final String nodeName = node.getName();
-		synchronized (timer) {
-			LinkedList<TimerTask> timerList = timers.get(nodeName);
-			if (timerList == null) {
-				timerList = new LinkedList<TimerTask>();
-				timers.put(node.getName(), timerList);
+		try {
+			// timers = new ConcurrentHashMap<String, LinkedList<TimerTask>>();
+			// tasks = new ConcurrentHashMap<String, LinkedList<Runnable>>();
+			final String nodeName = node.getName();
+			synchronized (timer) {
+				LinkedList<TimerTask> timerList = timers.get(nodeName);
+				if (timerList == null) {
+					timerList = new LinkedList<TimerTask>();
+					timers.put(node.getName(), timerList);
 
-			}
-
-			final LinkedList<TimerTask> timerListFin = timerList;
-
-			TimerTask task = new TimerTask() {
-				public void run() {
-					doAreYouThere(nodeName);
-
-					TimerTask taskAfter = new TimerTask() {
-						public void run() {
-							taskAfterTimeout.run();
-							doNodeDied(node.getName());
-						}
-					};
-					synchronized (timer) {
-						timerListFin.add(taskAfter);
-					}
-					timer.schedule(taskAfter, 10 * 1000);
 				}
-			};
 
-			timerListFin.add(task);
+				final LinkedList<TimerTask> timerListFin = timerList;
 
-			timer.schedule(task, timeInMilis);
+				TimerTask task = new TimerTask() {
+					public void run() {
+						doAreYouThere(nodeName);
 
-			System.out.println("new Timer: " + node.getName() + " time: "
-					+ timeInMilis / 1000);
+						TimerTask taskAfter = new TimerTask() {
+							public void run() {
+								taskAfterTimeout.run();
+								doNodeDied(node.getName());
+							}
+						};
+						synchronized (timer) {
+							timerListFin.add(taskAfter);
+						}
+						timer.schedule(taskAfter, 10 * 1000);
+					}
+				};
+
+				timerListFin.add(task);
+
+				timer.schedule(task, timeInMilis);
+
+				System.out.println("new Timer: " + node.getName() + " time: "
+						+ timeInMilis / 1000);
+			}
+		} catch (Exception e) {
+			if (verbose)
+				e.printStackTrace();
 		}
 	}
 
