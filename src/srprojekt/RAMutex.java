@@ -44,7 +44,8 @@ public class RAMutex implements Runnable {
 	private JSONObject jHeaderObj;
 	private boolean verbose;
 	private Object timerLockObj;
-
+	private int maxUseTime;
+	
 	public RAMutex(HashMap<String, String> params) throws IOException {
 		initDone = false;
 		needsToken = false;
@@ -64,7 +65,12 @@ public class RAMutex implements Runnable {
 		nodes = new HashMap<String, Node>();
 		thisNode = new Node();
 		thisNode.setName(params.get("name"));
-
+		maxUseTime = 10*1000;
+		String maxUseTimeStr = params.get("maxusetime");
+		if (maxUseTimeStr != null) {
+			maxUseTime = 1000* Integer.parseInt(maxUseTimeStr);
+		}
+		
 		String verboseStr = params.get("verbose");
 		if (verboseStr != null) {
 			verbose = Boolean.parseBoolean(verboseStr);
@@ -387,7 +393,7 @@ public class RAMutex implements Runnable {
 				public void run() {
 					doAfterGetMaxTimeOut();
 				}
-			}, 10 * 1000);
+			}, maxUseTime);
 
 		} else if (role.equals("NODE")) {
 			// ktos nowy sie pojawil
