@@ -241,7 +241,11 @@ public class RAMutex implements Runnable {
 				}
 				if (this.initDone == false && this.initCount <= 0) {
 					this.initDone = true;
-					// notify();
+					try {
+						notifyAll();
+					} catch (Exception e) {
+						
+					}
 					System.out.println("init done " + this.sequenceNumber);
 				}
 			}

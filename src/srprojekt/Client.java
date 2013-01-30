@@ -30,14 +30,22 @@ public class Client {
 		String waitTimeStr = params.get("wait_time");
 		if (waitTimeStr != null) {
 			waitTime = 1000 * Integer.parseInt(waitTimeStr);
+			
 		} else {
 			waitTime = 5000;
 			doRandomTimes = true;
 		}
+		if (waitTime<=0)
+			waitTime=1;
 
-		while (true) {
-			Thread.sleep(ThreadLocalRandom.current().nextInt(waitTime));
+		while (true) {			
 			try {
+				
+				if(doRandomTimes)				
+					Thread.sleep(ThreadLocalRandom.current().nextInt(waitTime));
+				else
+					Thread.sleep(waitTime);
+				
 				raMutex.requestToken();
 				doStuff(useTime, doRandomTimes);
 			} catch (Exception e) {
@@ -54,7 +62,12 @@ public class Client {
 			//time = ThreadLocalRandom.current().nextInt(time);
 		System.out.println("using token...1/4 " + System.currentTimeMillis()/1000);
 		System.out.println("using token...2/4");
-		Thread.sleep(ThreadLocalRandom.current().nextInt(time));
+		
+		if(random)
+			Thread.sleep(ThreadLocalRandom.current().nextInt(time));
+		else
+			Thread.sleep(time);
+		
 		System.out.println("using token...3/4");
 		System.out.println("using token...4/4" +  System.currentTimeMillis()/1000);
 	}
