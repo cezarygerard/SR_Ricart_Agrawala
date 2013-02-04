@@ -37,7 +37,7 @@ public class RAMutex implements Runnable {
 	private volatile boolean hasToken;
 	private volatile int repliesCount;
 	private Map<String, LinkedList<TimerTask>> timerLists;
-	
+
 	private Map<String, LinkedList<Runnable>> tasks;
 	private Timer timer;
 	private static final int BAD_VALUE = -1;
@@ -45,7 +45,7 @@ public class RAMutex implements Runnable {
 	private boolean verbose;
 	private Object timerLockObj;
 	private int maxUseTime;
-	
+
 	public RAMutex(HashMap<String, String> params) throws IOException {
 		initDone = false;
 		needsToken = false;
@@ -54,7 +54,7 @@ public class RAMutex implements Runnable {
 		initCount = 1;
 		timer = new Timer();
 		timerLockObj = new Object();
-	//	timer = new Tim
+		// timer = new Tim
 		int initHostPort;
 		String initHostAddress;
 		parser = new JSONParser();
@@ -65,12 +65,12 @@ public class RAMutex implements Runnable {
 		nodes = new HashMap<String, Node>();
 		thisNode = new Node();
 		thisNode.setName(params.get("name"));
-		maxUseTime = 10*1000;
+		maxUseTime = 10 * 1000;
 		String maxUseTimeStr = params.get("maxusetime");
 		if (maxUseTimeStr != null) {
-			maxUseTime = 1000* Integer.parseInt(maxUseTimeStr);
+			maxUseTime = 1000 * Integer.parseInt(maxUseTimeStr);
 		}
-		
+
 		String verboseStr = params.get("verbose");
 		if (verboseStr != null) {
 			verbose = Boolean.parseBoolean(verboseStr);
@@ -142,19 +142,28 @@ public class RAMutex implements Runnable {
 			try {
 				jobj = (JSONObject) parser.parse(inputLine);
 			} catch (ParseException e) {
-				// e.printStackTrace();
+				e.printStackTrace();
 			}
 		}
-		String key = jobj.get("TYPE").toString();
-		if (verbose)
-			System.out.println("dispatcher key: " + key);
+		String key = null;
+
 		try {
+			key = jobj.get("TYPE").toString();
+			if (verbose) {
+				System.out.println("dispatcher key: " + key);
+				System.out.println("dispatcher object: " + jobj.get("TYPE"));
+				System.out.println("dispatcher from: " + jobj.get("FROM"));
+			}
 			type = MsgType.handlerMap.get(key.toUpperCase());
 		} catch (NullPointerException e) {
-			// e.printStackTrace();
+			if (verbose) {
+				e.printStackTrace();
+			}
 		}
 
-		cancelTimer(new Node((JSONObject) jobj.get("FROM")));
+		if (verbose) {
+			cancelTimer(new Node((JSONObject) jobj.get("FROM")));
+		}
 
 		switch (type) {
 		case 0:
@@ -250,7 +259,7 @@ public class RAMutex implements Runnable {
 					try {
 						notifyAll();
 					} catch (Exception e) {
-						
+
 					}
 					System.out.println("init done " + this.sequenceNumber);
 				}
@@ -516,8 +525,14 @@ public class RAMutex implements Runnable {
 
 				BufferedReader in = new BufferedReader(new InputStreamReader(
 						clientSocket.getInputStream()));
-
-				final String inputLine = in.readLine();
+				StringBuilder sb = new StringBuilder();
+				String tmp;
+				while( (tmp = in.readLine() ) != null)
+				{
+					sb.append(tmp);
+				}
+				
+				final String inputLine = sb.toString();
 
 				new Thread(new Runnable() {
 					public void run() {
@@ -696,7 +711,7 @@ public class RAMutex implements Runnable {
 				timerListFin.add(task);
 
 				timer.schedule(task, timeInMilis);
-				
+
 				System.out.println("new Timer: " + node.getName() + " time: "
 						+ timeInMilis / 1000);
 			}
